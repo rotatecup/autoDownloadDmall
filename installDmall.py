@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 '''
-@author: shwang
+@author: shoubo.wang@dmall.com
 '''
 import urllib
 import os
@@ -32,7 +33,7 @@ def getDownloadURL(rootURL, env="-dmtest"):
     for i in range(len(allNames)):
         if env in allNames[i]:
             downloadURL = downloadPath + allNames[i]
-            print "The latest build is {}".format(allNames[i])
+            print "当前Jenkins最新编译出的android app版本包是：{}".format(allNames[i])
             return downloadURL
         
     return None
@@ -42,14 +43,14 @@ def downloadAPP(downloadURL, localPath):
 
     try:
         begin_time = time.ctime()
-        print "Begin to download file at {}".format(begin_time)
+        print "开始下载文件： {}".format(begin_time)
         # urllib.urlretrieve(download_url, local_dir + os.sep + filename, url_call_back)
         # no need to callback for now
         urllib.urlretrieve(downloadURL, localPath + fileName)
-        print "Finish downloading file at {}".format(time.ctime())
+        print "完成下载文件： {}".format(time.ctime())
         
     except:
-        print "exception happened"
+        print "下载异常，请稍后再试"
         return False
         
     finally:
@@ -59,14 +60,14 @@ def downloadAPP(downloadURL, localPath):
             #print "the build_size is:", build_size
             if build_size < target_build_size:
                 if build_size < 5 * 1000:
-                    print "build doesn't exist"
+                    print "版本不存在，下载失败"
                     return False
                 else:
-                    print "download error, need to download {} again.".format(fileName)
+                    print "{}文件下载失败，重试中.".format(fileName)
                     os.remove(localPath + fileName) 
                 return False
             else:
-                print "Download successfully"
+                print "文件下载成功。保存位置为：{}".format(localPath)
                 return localPath + fileName     
         
 
@@ -85,14 +86,14 @@ def isDownloaded(downloadURL, localPath):
     fileName = downloadURL.rsplit("/", 1)[1]
     if os.path.exists(localPath + fileName):
         if os.path.getsize(localPath + fileName) != get_length_from_server(downloadURL):
-            print "Download unfinished. Need download again."
+            print "文件下载未完成，需要重新下载."
             os.remove(localPath + fileName)
             return False
         else:
-            print "Already downloaded in the directory {}".format(localPath)
+            print "文件已经在目录 {}中存在".format(localPath)
             return localPath + fileName
     else:
-        print "Not download yet."
+        print "文件尚未下载。"
         return False
     
 def isReadyForInstall(downloadURL, localPath=os.getcwd() + os.path.sep):
@@ -109,29 +110,39 @@ def isReadyForInstall(downloadURL, localPath=os.getcwd() + os.path.sep):
         else:
             break
     if not res:    
-        print "tried downloading from {} for 3 times, but all failed.".format(downloadURL)        
+        print "文件 {}下载尝试了三次，均失败，退出下载.".format(downloadURL)        
     
     return res
 
 if __name__ == "__main__":
     device = adbdevice.AdbCommands()
-    rootURL = "http://115.182.214.16:8080/view/APP%E6%9E%84%E5%BB%BA/job/app_android_build/"
-    # -dmtest is for test environment
-    # -pre is for prerelease environment
-    # -release is for release environment
-    downloadURL = getDownloadURL(rootURL,"-dmtest")
-    if downloadURL:
-        # You can type a path to store the downloaded file. If not, the default path is the current directory.
-        apkFile = isReadyForInstall(downloadURL)
-
-        need_uninstall = False
-		
-        if apkFile:
-            if need_uninstall:
-                device.uninstall_package("com.wm.dmall")
-            print "The latest APK is downloaded successfully. Will start to install it now..."    
-            install = device.install_package(apkFile)
-            if install:
-                print "Install successfully"
-    else:
-        print "Can not fetch the download url currently. Please try again later"
+    rootURL = "http://192.168.90.98:8080/job/app_android_build/"
+    flag = True # 判断当前网页链接当前是否连通
+    pureInstall = False # 可配置，设置为True时为全新安装，False为覆盖安装。
+    if urllib.urlopen(rootURL).getcode() == 404:
+        rootURL = "http://115.182.214.16:8080/view/APP%E6%9E%84%E5%BB%BA/job/app_android_build/"
+        if urllib.urlopen(rootURL).getcode() == 404:
+            flag = False
+            print "目前Jenkins服务不可用，请稍后再试。"
+    
+    if flag:
+        # 需要输入想要下载测试版本的环境：
+        # 测试环境：-dmtest 
+        # 预发环境：-pre 
+        # 正式环境：-release 
+        downloadURL = getDownloadURL(rootURL,"-dmtest")
+        if downloadURL:
+            # 可在下面函数指定文件下载位置，不指定时默认为当前位置。
+            apkFile = isReadyForInstall(downloadURL)
+            if apkFile:
+                if pureInstall:
+                    print "你选择了全新安装，安装之前会自动卸载手机上已安装的多点App。"
+                    device.uninstall_package("com.wm.dmall")
+                    
+                print "安装包已经就绪，马上安装。。。"    
+                install = device.install_package(apkFile)
+                if install:
+                    print "文件安装成功。3秒后退出。"
+                    time.sleep(3)
+        else:
+            print "下载链接获取失败，请稍后再试。"
