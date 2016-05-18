@@ -122,7 +122,8 @@ if __name__ == "__main__":
     device = adbdevice.AdbCommands()
     rootURL = "http://192.168.90.98:8080/job/app_android_build/"
     flag = True # 判断当前网页链接当前是否连通
-    pureInstall = False # 可配置，设置为True时为全新安装，False为覆盖安装。
+    pureInstall = True # 可配置，设置为True时为全新安装，False为覆盖安装。
+    launchApp = True # 可配置，设置为True时安装成功后会自动启动多点APP
     if urllib.urlopen(rootURL).getcode() == 404:
         rootURL = "http://115.182.214.16:8080/view/APP%E6%9E%84%E5%BB%BA/job/app_android_build/"
         if urllib.urlopen(rootURL).getcode() == 404:
@@ -146,7 +147,18 @@ if __name__ == "__main__":
                 print u"安装包已经就绪，马上安装。。。"    
                 install = device.install_package(apkFile)
                 if install:
-                    print u"文件安装成功。3秒后退出。"
-                    time.sleep(3)
+                    print u"文件安装成功。。。"
+                    time.sleep(2)
+                    if launchApp:
+                        print u"正在启动应用，请稍后。。。"
+                        ret = os.popen("adb shell am start -n com.wm.dmall/.MainActivity").read()
+                        if "Starting: Intent" in ret:
+                            print u"App启动成功，请在手机端查看吧！程序2秒后退出。"
+                            time.sleep(2)
+                            
+                        else:
+                            print u"App启动失败，请手动启动吧。程序2秒后退出。"
+                            time.sleep(2)
+                        
         else:
             print u"下载链接获取失败，请稍后再试。"
