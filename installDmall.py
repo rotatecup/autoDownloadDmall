@@ -8,13 +8,19 @@ import time
 import re
 import adbdevice
 
+def getMaxNumber(buildList):
+    newList = []
+    for i in range(len(buildList)):
+        newList.append(int(buildList[i].strip("#")))
+        
+    return str(max(newList))
+
 def getLatestBuildID(rootURL):
     # 获取Jenkins上版本编译的序列号，用来拼用于下载的URL
     content = urllib.urlopen(rootURL).read()
-    buildList = re.findall("#\d{2}|#\d{3}", content)
-    latestBuild = sorted(buildList,reverse=True)
-    
-    return latestBuild[0].strip("#")
+    buildList = re.findall("#\d{2,3}", content)
+
+    return getMaxNumber(buildList)
 
 def getDownloadURL(rootURL, env="-dmtest"):
     # APP的URL分为三个部分，前缀rootURL+编译的序列号+后缀（如下）
@@ -36,7 +42,7 @@ def getDownloadURL(rootURL, env="-dmtest"):
     for i in range(len(allNames)):
         if env in allNames[i]:
             downloadURL = downloadPath + allNames[i]
-            print u"当前Jenkins最新可用的android app版本包是：{}".format(allNames[i])
+            print u"当前Jenkins最新可用的android app版本序列号为：{},包名是：{}".format(latestBuildID,allNames[i])
             return downloadURL
         
     return None
@@ -121,9 +127,10 @@ def isReadyForInstall(downloadURL, localPath=os.getcwd() + os.path.sep):
 if __name__ == "__main__":
     device = adbdevice.AdbCommands()
     rootURL = "http://192.168.90.98:8080/job/app_android_build/"
-    flag = True # 判断当前网页链接当前是否连通
+    flag = True # 无需改动，用于判断当前网页链接当前是否连通
     pureInstall = True # 可配置，设置为True时为全新安装，False为覆盖安装。
     launchApp = True # 可配置，设置为True时安装成功后会自动启动多点APP
+    
     if urllib.urlopen(rootURL).getcode() == 404:
         rootURL = "http://115.182.214.16:8080/view/APP%E6%9E%84%E5%BB%BA/job/app_android_build/"
         if urllib.urlopen(rootURL).getcode() == 404:
@@ -159,6 +166,9 @@ if __name__ == "__main__":
                         else:
                             print u"App启动失败，请手动启动吧。程序2秒后退出。"
                             time.sleep(2)
+                       
+                else:
+                    print u"文件自动安装失败。请尝试手动安装。"
                         
         else:
             print u"下载链接获取失败，请稍后再试。"
