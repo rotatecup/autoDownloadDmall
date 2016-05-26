@@ -8,6 +8,10 @@ import time
 import re
 import adbdevice
 
+dictENV = {"-dmtest":       u"测试环境",
+           "-prerelease":   u"预发环境",
+           "-release":      u"正式环境"}
+
 def getMaxNumber(buildList):
     newList = []
     for i in range(len(buildList)):
@@ -18,11 +22,19 @@ def getMaxNumber(buildList):
 def getLatestBuildID(rootURL):
     # 获取Jenkins上版本编译的序列号，用来拼用于下载的URL
     content = urllib.urlopen(rootURL).read()
-    buildList = re.findall("#\d{2,3}", content)
+    buildList = re.findall("#\d{2,4}", content)
 
     return getMaxNumber(buildList)
 
-def getDownloadURL(rootURL, env="-dmtest"):
+def getBuildNames(downloadPath, version):
+    contents = urllib.urlopen(downloadPath).read()
+    # 正则匹配合乎要求的App包名
+    pattern = re.compile(r'com.wm.dmall-v{}.+?apk'.format(version))
+    buildNames = re.findall(pattern, contents)  
+    
+    return buildNames
+
+def getDownloadURL(rootURL, version, env="-dmtest"):
     # APP的URL分为三个部分，前缀rootURL+编译的序列号+后缀（如下）
     latestBuildID = getLatestBuildID(rootURL)
     downloadPath = rootURL + latestBuildID + "/artifact/Dmall2/build/outputs/apk/"
@@ -31,18 +43,17 @@ def getDownloadURL(rootURL, env="-dmtest"):
         # 从最近的一个build序列号开始尝试去连接，如果失败，则取该版本的上一个序列号，直到连接成功（code=200）
         latestBuildID = str(int(latestBuildID) - 1)
         downloadPath = rootURL + latestBuildID + "/artifact/Dmall2/build/outputs/apk/"
-
-    contents = urllib.urlopen(downloadPath).read()
-    # 正则匹配合乎要求的App包名
-    pattern = re.compile(r'com.wm.dmall.+?apk')
-    buildNames = re.findall(pattern, contents)
+    
+    while not getBuildNames(downloadPath, version):
+        latestBuildID = str(int(latestBuildID) - 1)
+        downloadPath = rootURL + latestBuildID + "/artifact/Dmall2/build/outputs/apk/"
     
     # 去重，然后按照不同环境包名的命名去匹配需要下载的环境包，最后返回该包的下载链接
-    allNames = list(set(buildNames))
+    allNames = list(set(getBuildNames(downloadPath, version)))
     for i in range(len(allNames)):
         if env in allNames[i]:
             downloadURL = downloadPath + allNames[i]
-            print u"当前Jenkins最新可用的android app版本序列号为：{},包名是：{}".format(latestBuildID,allNames[i])
+            print u"当前Jenkins最新可用的 {}下App版本序列号为：{}；包名是：{}".format(dictENV[env], latestBuildID, allNames[i])
             return downloadURL
         
     return None
@@ -80,7 +91,6 @@ def downloadAPP(downloadURL, localPath):
                 print u"文件下载成功。保存位置为：{}".format(localPath)
                 return localPath + fileName     
         
-
 def get_length_from_server(downloadURL):
     page = urllib.urlopen(downloadURL)
     # the Content-Length part is something like: 'Content-Length: 27107189'
@@ -138,11 +148,13 @@ if __name__ == "__main__":
             print u"目前Jenkins服务不可用，请稍后再试。"
     
     if flag:
-        # 需要输入想要下载测试版本的环境：
+        deleteFile = False
+        # 需要输入想要下载测试版本以及对应的环境：
+        # 目前支持版本为：2.2.1和2.2.0
         # 测试环境：-dmtest 
         # 预发环境：-pre 
         # 正式环境：-release 
-        downloadURL = getDownloadURL(rootURL,"-dmtest")
+        downloadURL = getDownloadURL(rootURL, "2.2.1", "-release")
         if downloadURL:
             # 可在下面函数指定文件下载位置，不指定时默认为当前位置。
             apkFile = isReadyForInstall(downloadURL)
@@ -151,10 +163,14 @@ if __name__ == "__main__":
                     print u"你选择了全新安装，安装之前会自动卸载手机上已安装的多点App。"
                     device.uninstall_package("com.wm.dmall")
                     
-                print u"安装包已经就绪，马上安装。。。"    
+                else:
+                    print u"你选择了覆盖安装，安装包已经就绪，马上安装。"
+                    
                 install = device.install_package(apkFile)
                 if install:
                     print u"文件安装成功。。。"
+                    if deleteFile:
+                        os.remove(apkFile)
                     time.sleep(2)
                     if launchApp:
                         print u"正在启动应用，请稍后。。。"
@@ -162,10 +178,12 @@ if __name__ == "__main__":
                         if "Starting: Intent" in ret:
                             print u"App启动成功，请在手机端查看吧！程序2秒后退出。"
                             time.sleep(2)
+                            os._exit(1)
                             
                         else:
                             print u"App启动失败，请手动启动吧。程序2秒后退出。"
                             time.sleep(2)
+                            os._exit(1)
                        
                 else:
                     print u"文件自动安装失败。请尝试手动安装。"
